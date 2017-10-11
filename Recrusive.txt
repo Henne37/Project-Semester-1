@@ -1,0 +1,265 @@
+ void play(int row, int col) {   // recursive procedure that tries to solve the puzzle
+         // parameter "square" is the number of the next empty
+         // to be filled.  This is only complicated beacuse all
+         // the details of speed/pause/step are handled here.
+         for (int p=0; p<pieces.length; p++) {
+            if (!aborted && (used[pieces[p][0]] == false)) {
+               if (!putPiece(p,row,col))
+                  continue;
+               if (checkForBlocks && obviousBlockExists()) {
+                  removePiece(p,row,col);
+                  continue;
+               }
+               used[pieces[p][0]] = true;  // stop this piece from being used again on the board
+               numused++;
+               moveCount++;
+               movesSinceCheck++;
+                  }
+               }
+               if (numused == piecesNeeded) {  // puzzle is solved
+                  solutionCount++;
+                                   }
+               }
+                  movesSinceCheck = 0;
+                  
+                  int nextRow = row;  // find next empty space, going left-to-right then top-to-bottom
+                  int nextCol = col;
+                  while (board.getColor(nextRow,nextCol) != null) { // find next empty square
+                     nextCol++;
+                     if (nextCol == cols) {
+                        nextCol = 0;
+                        nextRow++;
+                        if (nextRow == row)  // We've gone beyond the end of the board!
+                           throw new IllegalStateException("Internal Error -- moved beyond end of board!");
+                     }
+                  }
+                  play(nextRow, nextCol);  // and try to complete the solution
+                  if (aborted)
+                     return;
+               }
+               removePiece(p,row,col);  // backtrack
+               numused--;
+               used[pieces[p][0]] = false;
+            }
+         }
+            int nextRow = row;  // find next empty space, going left-to-right then top-to-bottom
+            int nextCol = col;
+            do { // find next empty square
+               nextCol++;
+               if (nextCol == cols) {
+                  nextCol = 0;
+                  nextRow++;
+                  if (nextRow == row)  // We've gone beyond the end of the board!
+                     return;
+               }
+            } while (board.getColor(nextRow,nextCol) != null);
+            play(nextRow, nextCol);  // and try to complete the solution
+            squaresLeftEmpty--;
+         }
+      }
+      
+      boolean obviousBlockExists() { // Check whether the board has a region that can never be filled because of the number of squares it contains.
+         blockCheckCt++;
+         int forcedEmptyCt = 0;
+         for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++) {
+               int blockSize = countEmptyBlock(r,c);
+               if (blockSize % 5 == 0)
+                  continue;
+               forcedEmptyCt += blockSize % 5;
+               if (forcedEmptyCt > emptySpaces)
+                  return true;
+            }
+         return false;
+      }
+      
+      int countEmptyBlock(int r, int c) {  // Find the size of one empty region on the board; recursive routine called by obviousBlockExists.
+         if (blockCheck[r][c] == blockCheckCt || board.getColor(r,c) != null)
+            return 0;
+         int c1 = c, c2 = c;
+         while (c1 > 0 && blockCheck[r][c1-1] < blockCheckCt && board.getColor(r,c1-1) == null)
+            c1--;
+         while (c2 < cols-1 && blockCheck[r][c2+1] < blockCheckCt && board.getColor(r,c2+1) == null)
+            c2++;
+         for (int i = c1; i <= c2; i++)
+            blockCheck[r][i] = blockCheckCt;
+         int ct = c2 - c1 + 1;
+         if (r > 0)
+            for (int i = c1; i <= c2; i++)
+               ct += countEmptyBlock(r-1,i);
+         if (r < rows-1)
+            for (int i = c1; i <= c2; i++)
+               ct += countEmptyBlock(r+1,i);
+         return ct;
+      }
+      
+         
+      /**
+       * The run method for the thread that runs the game.
+       */
+      public void run() { 
+         while (true) {
+            try {
+               running = false;
+               saveAction.setEnabled(true);
+               board.repaint();
+               while (message != GO_MESSAGE && message != TERMINATE_MESSAGE) {  // wait for game setup
+                  if (message == RESTART_RANDOM_MESSAGE) {
+                     setUpRandomBoard();
+                     comment.setText("Solving...");
+                     creatingBoard = false;
+                     setMessage(GO_MESSAGE);
+                     doDelay(1000);  // give user a chance to change selection
+                  }
+                  else if (message == RESTART_CLEAR_MESSAGE || message == RESTART_MESSAGE) {
+                     clickCt = 0;
+                     creatingBoard = spareSpaces > 0;
+                     if (message == RESTART_MESSAGE && spareSpaces > 0) {
+                        for (int r = 0; r < rows; r++)
+                           for (int c = 0; c < cols; c++)
+                              if (board.getColor(r,c) != emptyColor)
+                                 board.setColor(r,c,null);
+                              else
+                                 clickCt++;
+                        if (spareSpaces > 0 && clickCt == spareSpaces)
+                           comment.setText("Use \"Go\" to Start (or click a black square)");
+                        else
+                           comment.setText("Select Squares or Use \"Go\" to Start");
+                     }
+                     else {
+                        board.clear();
+                        if (creatingBoard)
+                           comment.setText("Click (up to) " + spareSpaces + " squares");
+                        else
+                           comment.setText("Use \"Go\" to Start");
+                     }
+                     setMessage(0);
+                     doDelay(-1);  // wait forever (for control message to start game)
+                  }
+               }
+               if (message == TERMINATE_MESSAGE)
+                  break;
+               creatingBoard = false;
+               running = true;
+               saveAction.setEnabled(false);
+               board.setAutopaint(delay > 0);
+               board.repaint();
+               doDelay(25);
+               // begin next game
+               for (int i=1; i<=12; i++)
+                  used[i] = false;
+               numused = 0;
+               int startRow = 0;  // reprsents the upper left corner of the board
+               int startCol = 0;
+               while (board.getColor(startRow,startCol) != null) {
+                  startCol++;  // move past any filled squares, since Play(square) assumes the square is empty
+                  if (startCol == cols) {
+                     startCol = 0;
+                     startRow++;
+                  }
+               }
+               moveCount = movesSinceCheck = solutionCount = 0;
+               int[][] pieces2use = piece_data;
+               if (symmetryCheck || useOneSidedPieces) {
+                  long removeMask = 0;
+                  if (symmetryCheck) {
+                     int symmetryType = checkSymmetries(!useOneSidedPieces);
+                     //System.out.println("Found symmetry type " + symmetryType);
+                     if (symmetryType != SYMMETRY_NONE) {
+                        for (int p = 0; p < remove_for_symmetry[symmetryType].length; p++)
+                           removeMask = removeMask | (1L << remove_for_symmetry[symmetryType][p]);
+                     }
+                  }
+                  if (useOneSidedPieces) {
+                     for (int p = 0; p < 6; p++) {
+                        int[] remove_for_one_sided = side_info[p][ useSideA[p]? 1 : 0 ];
+                        for (int j = 0; j < remove_for_one_sided.length; j++)
+                           removeMask = removeMask | (1L << remove_for_one_sided[j]);
+                     }
+                  }
+                  if (removeMask != 0) {
+                     int ct = 0;
+                     for (int p = 0; p < 63; p++)
+                        if ((removeMask & (1L << p)) != 0)
+                           ct++;
+                     pieces2use = new int[63-ct][];
+                     int j = 0;
+                     //System.out.print("Remove piece ");
+                     for (int p = 0; p < piece_data.length; p++)
+                        if ((removeMask & (1L << p)) == 0)
+                           pieces2use[j++] = piece_data[p];
+                        //else 
+                        //   System.out.print(p + " ");
+                     //System.out.println("\n");
+                  }
+               }
+               pieces = pieces2use;
+               if (randomizePieces) {
+                  if (pieces2use == piece_data) {  // Don't mess with ordering in the primary piece_data array
+                     pieces = new int[pieces2use.length][];
+                     for (int i = 0; i < pieces.length; i++)
+                        pieces[i] = pieces2use[i];
+                  }
+                  for (int i = 0; i < pieces.length; i++) {
+                     int r = (int)(pieces.length * Math.random());
+                     int[] temp = pieces[r];
+                     pieces[r] = pieces[i];
+                     pieces[i] = temp;
+                  }
+               }
+               board.setAutopaint( selectedSpeed > 1 );
+               randomizePiecesChoice.setEnabled(false);
+               symmetryCheckChoice.setEnabled(false);
+               oneSidedAction.setEnabled(false);
+               blockCheck = new int[rows][cols];
+               blockCheckCt = 0;
+               emptySpaces = spareSpaces - clickCt;
+               squaresLeftEmpty = 0;
+               aborted = false;
+               boolean blocked = false;
+               if (checkForBlocks && obviousBlockExists())
+                  blocked = true;
+               else
+                  play(startRow,startCol);   // run the recursive algorithm that will solve the puzzle
+               if (message == TERMINATE_MESSAGE)
+                  break;
+               randomizePiecesChoice.setEnabled(true);
+               symmetryCheckChoice.setEnabled(true);
+               oneSidedAction.setEnabled(true);
+               running = false;
+               saveAction.setEnabled(true);
+               board.setAutopaint(true);
+               board.repaint();
+               if (!aborted) {
+                  pauseAction.setEnabled(false);
+                  stepAction.setEnabled(false);
+                  if (blocked)
+                     comment.setText("Unsolvable because of obvious blocking.");
+                  else if (solutionCount == 0)
+                     comment.setText("Done. No soutions. " + moveCount + " moves.");
+                  else if (solutionCount == 1)
+                     comment.setText("Done. 1 solution. " + moveCount + " moves.");
+                  else
+                     comment.setText("Done. " + solutionCount + " solutions. "+ moveCount + " moves.");
+                  if (spareSpaces > 0)
+                     creatingBoard = true;
+                  doDelay(-1);
+               }
+               if (message == TERMINATE_MESSAGE)
+                  break;
+            }
+            catch (Exception e) {
+               JOptionPane.showMessageDialog(PentominosPanel.this,"An internal error has occurred:\n"+ e + "\n\nRESTARTING.");
+               e.printStackTrace();
+               board.setAutopaint(true);
+               pauseAction.setEnabled(true);
+               stepAction.setEnabled(false);
+               message = RESTART_MESSAGE;
+            }
+         } // end while
+      }
+      
+   } // end nested class GameThread
+   
+   
+}
