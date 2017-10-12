@@ -1,8 +1,5 @@
  void play(int row, int col) {   // recursive procedure that tries to solve the puzzle
-         // parameter "square" is the number of the next empty
-         // to be filled.  This is only complicated beacuse all
-         // the details of speed/pause/step are handled here.
-         for (int p=0; p<pieces.length; p++) {
+            for (int p=0; p<pieces.length; p++) {
             if (!aborted && (used[pieces[p][0]] == false)) {
                if (!putPiece(p,row,col))
                   continue;
